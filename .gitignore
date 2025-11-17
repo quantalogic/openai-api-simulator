@@ -1,0 +1,50 @@
+# Binaries for programs and plugins
+/bin/
+/build/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go
+/vendor/
+/pkg/
+GOMODCACHE
+
+# Build output
+/bin/
+/out/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.iml
+*.swp
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Logs and temp
+*.log
+tmp/
+*.tmp
+
+# Coverage
+coverage.out
+
+# Environment files
+.env
+.env.local
+
+# Docker
+docker-compose.override.yml
+
+# Node
+node_modules/
