@@ -39,6 +39,18 @@ Additional useful endpoints
 - `GET /v1/models` and `GET /models` - model listing
 - `POST /v1/chat/completions` and `POST /chat/completions` - chat completions (streaming or non-streaming)
 
+Command-line stream configuration
+
+You can set default streaming latency and token throttles when starting the server. These defaults apply when the client does not include `stream_options` in the request.
+
+Example flags:
+
+```bash
+./server -port 3080 -stream_delay_min_ms 50 -stream_delay_max_ms 200 -stream_tokens_per_second 30
+```
+
+This starts the simulator with 50–200ms jitter per chunk and aims to emit tokens at ~30 tokens/sec.
+
 ### Docker
 
 Build and run using Docker (the container exposes port 3080):
@@ -114,6 +126,27 @@ Streaming notes
 - The simulator emits `data: <json>\n\n` events where each event's payload is a valid OpenAI-style chunk.
 - Each event is JSON and finishes with `data: [DONE]` to indicate the stream end.
 - Use `curl -N` to keep the connection open and see events as they arrive.
+
+Latency & throttling
+
+- You can configure streaming latency (jitter) and a token-rate throttle by
+  setting `stream_options` in the request body. This allows you to emulate
+  both network/computation jitter and model throughput.
+
+  Example fields supported in `stream_options`:
+  - `delay_min_ms` / `delay_max_ms` — randomized per-chunk jitter in millis
+  - `tokens_per_second` — throttle rate for token emission (float)
+
+  Example:
+
+```json
+{"model":"gpt-sim-1","messages":[{"role":"user","content":"Hi"}],"stream":true,
+ "stream_options":{"delay_min_ms":50,"delay_max_ms":200,"tokens_per_second":30}}
+```
+
+This will inject a random delay between 50–200ms per chunk and attempt to
+emit tokens at roughly 30 tokens/sec which makes slow or bursty LLMs easier
+to test against.
 
 Non-streaming JSON completion:
 Structured JSON response example (response_format: json_schema):
@@ -226,7 +259,7 @@ sequenceDiagram
 
 Tip: if your editor or docs site renders Mermaid, these diagrams will show the pastel colors; otherwise they remain readable as plain text in the raw README.
 
-**Architecture Diagram**
+### Architecture Diagram
 
 High-level component view:
 

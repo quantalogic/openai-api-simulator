@@ -12,8 +12,11 @@
 
 # Go
 /vendor/
-/pkg/
+# NOTE: 'pkg/' contains source files and must be included in commit. Do NOT ignore it.
 GOMODCACHE
+
+# Avoid committing compiled server binary
+server
 
 # Build output
 /bin/
