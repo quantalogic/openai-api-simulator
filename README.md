@@ -2,7 +2,7 @@
 
 This is a compact, dependency-free OpenAI-compatible Chat Completion simulator written in Go. It exposes a minimal, predictable subset of OpenAI Chat Completion features so you can test UIs, integrate tool-calling flows, or build deterministic CI tests without calling a paid service.
 
-![Demo of streaming chat completions from the OpenAI API Simulator](./demo.gif))
+![Demo of streaming chat completions from the OpenAI API Simulator](./demo.gif)
 
 Why this repo is helpful
 
