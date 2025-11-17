@@ -1,0 +1,28 @@
+services:
+  simulator:
+    build: .
+    image: openai-api-simulator:latest
+    ports:
+      - "3080:3080"
+    environment:
+      - GIN_MODE=release
+
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    restart: unless-stopped
+    ports:
+      - "3000:8080" # open-webui default UI port
+    environment:
+      # Tell Open WebUI to use the simulator as an OpenAI-compatible backend
+      - OPENAI_API_BASE_URL=http://simulator:3080
+      # Open WebUI expects a key to be set when using OpenAI API flow; the simulator does not validate keys
+      - OPENAI_API_KEY=simulator
+      # Disable auth for quick local development
+      - WEBUI_AUTH=False
+    volumes:
+      - open-webui:/app/backend/data
+    depends_on:
+      - simulator
+
+volumes:
+  open-webui:
