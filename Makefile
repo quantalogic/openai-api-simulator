@@ -12,8 +12,10 @@ setup:
 	@echo "Preparing development environment..."
 	@echo "Setting GOPRIVATE to prevent proxy lookups for private modules..."
 	go env -w GOPRIVATE=github.com/quantalogic
-	@echo "Running 'go mod tidy'..."
-	go mod tidy
+	@echo "Setting GO111MODULE=on for proper module handling..."
+	go env -w GO111MODULE=on
+	@echo "Downloading dependencies..."
+	go mod download
 	@echo "✓ Setup complete! You can now run 'make build' or 'make test'."
 
 all: setup build
