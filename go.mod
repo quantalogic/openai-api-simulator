@@ -20,16 +20,14 @@ require (
 // `github.com/quantalogic/openai-api-simulator` (see top-level `module`)
 // so this replace directive can be removed for CI or if you prefer strict
 // import path checks.
-replace github.com/openai/openai-api-simulator => .
+replace github.com/openai/openai-api-simulator v0.0.0 => .
 
-// While the module's canonical path is `github.com/quantalogic/openai-api-simulator`,
-// some tooling environments (or users with GO111MODULE=auto) may still try to
-// resolve the canonical module from the network. For development convenience
-// we offer an optional local replace that ensures the root module resolves to
-// the local copy rather than fetching it from the Go proxy. This is useful when
-// you're working on the code locally and don't want the module to be looked up
-// remotely. Remove this for CI if you need the proxy behavior.
-replace github.com/quantalogic/openai-api-simulator => .
+// The canonical module path `github.com/quantalogic/openai-api-simulator` must
+// also be replaced locally to prevent Go from querying the proxy during
+// `go mod tidy`. This is essential for local development and for users cloning
+// the repository fresh. The version constraint v1.0.0 is arbitrary and matches
+// any local import; Go will use the local directory instead of the proxy.
+replace github.com/quantalogic/openai-api-simulator v1.0.0 => .
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect

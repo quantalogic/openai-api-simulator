@@ -9,7 +9,8 @@ IMAGE?=openai-api-simulator:latest
 .PHONY: all build run test tidy clean fmt help compose-logs compose-openwebui docker-run-openwebui docker-run docker-clean open
 setup:
 	@echo "Preparing development environment: run 'go mod tidy'"
-	go mod tidy
+	@echo "Setting GOPRIVATE to prevent proxy lookups for local module..."
+	GOPRIVATE=github.com/quantalogic go mod tidy
 
 all: build
 
@@ -23,7 +24,7 @@ test:
 	go test ./... -v
 
 tidy:
-	go mod tidy
+	GOPRIVATE=github.com/quantalogic go mod tidy
 
 fmt:
 	gofmt -w .
