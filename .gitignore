@@ -15,8 +15,8 @@
 # NOTE: 'pkg/' contains source files and must be included in commit. Do NOT ignore it.
 GOMODCACHE
 
-# Avoid committing compiled server binary
-server
+# Avoid committing compiled server binary (but not pkg/server directory)
+/server
 
 # Build output
 /bin/
