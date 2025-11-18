@@ -11,23 +11,62 @@ Why this repo is helpful
 - SSE streaming with OpenAI-compatible `data: <json>` framing
 - Structured JSON schema generation and basic tool-call simulation
 - Deterministic seeding and heuristics for reproducible tests
+- **NEW: Real AI inference with nanochat (561M parameter model)**
 
-## Running
+## 🚀 NanoChat - Real AI in One Command
+
+Run a **real 561M parameter AI model** with a single command:
+
+```bash
+make run-nanochat
+```
+
+Or build and run:
+
+```bash
+make build-nanochat
+./openai-api-simulator-nanochat
+```
+
+This will:
+- ✅ Auto-detect your platform (macOS/Linux, Intel/ARM)
+- ✅ Download llama.cpp server (~50MB) and nanochat model (~316MB) on first run
+- ✅ Cache everything for instant subsequent starts (~2 seconds)
+- ✅ Start an OpenAI-compatible API server on port 8090
+- ✅ Provide both fake (`gpt-sim-1`) and real (`nanochat`) models
+
+**First run:** ~45 seconds (downloads everything)  
+**Subsequent runs:** ~2 seconds (uses cache)
+
+Test the real AI model:
+
+```bash
+curl http://localhost:8090/v1/chat/completions \
+  -d '{"model":"nanochat","messages":[{"role":"user","content":"Why is the sky blue?"}]}'
+```
+
+### Available Models
+
+When running with nanochat:
+- `gpt-sim-1` - Original deterministic fake model (for testing)
+- `nanochat` - Real 561M parameter model by sdobson (Andrej Karpathy's nanochat)
+
+## Running (Simulator Mode)
 
 Quick start (recommended):
 
-1. Build the server and run it on port 3080:
+1. Build the server and run it on port 8090:
 
 ```bash
 make build
-make run PORT=3080
+make run PORT=8090
 ```
 
 1. Or run directly with go build:
 
 ```bash
 go build ./cmd/server
-./server -port 3080
+./server -port 8090
 ```
 
 This will start an HTTP server with the route: `POST /v1/chat/completions`.
@@ -46,68 +85,198 @@ You can set default streaming latency and token throttles when starting the serv
 Example flags:
 
 ```bash
-./server -port 3080 -stream_delay_min_ms 50 -stream_delay_max_ms 200 -stream_tokens_per_second 30
+./server -port 8090 -stream_delay_min_ms 50 -stream_delay_max_ms 200 -stream_tokens_per_second 30
 ```
 
 This starts the simulator with 50–200ms jitter per chunk and aims to emit tokens at ~30 tokens/sec.
 
 ### Docker
 
-Build and run using Docker (the container exposes port 3080):
+Build and run using Docker (the container exposes port 8090):
 
 ```bash
 make docker-build
-make docker-run PORT=3080
+make docker-run PORT=8090
 ```
 
-Or use compose:
+## 🐳 Docker Compose Deployment Modes
+
+Choose one of two deployment modes depending on your needs:
+
+### Mode 1: Pure Simulation (No AI Model)
+
+**Best for:** Quick testing, CI/CD pipelines, lightweight deployments, instant responses
+
+```bash
+make compose-up-noai
+```
+
+This starts:
+
+- **API Simulator** on `http://localhost:8090` — responds instantly with fake AI
+- **Open Web UI** on `http://localhost:3000` — web interface for chat
+
+**What's included:**
+
+- No Python dependencies
+- No model downloads
+- Instant startup (~2 seconds)
+- Deterministic responses for testing
+
+**Test it:**
+
+```bash
+make open  # Opens Web UI in browser
+# Or test the API directly:
+curl http://localhost:8090/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4","messages":[{"role":"user","content":"Hello"}],"stream":true}'
+```
+
+**Stop it:**
+
+```bash
+make compose-down-noai
+```
+
+### Mode 2: Full Stack with NanoChat (Real AI Model)
+
+**Best for:** Production testing, realistic inference, benchmarking, real AI responses
 
 ```bash
 make compose-up
-# later
+```
+
+This starts:
+
+- **API Simulator** on `http://localhost:8090` — with NanoChat inference
+- **NanoChat Inference Server** on `http://localhost:8081` — PyTorch model
+- **Open Web UI** on `http://localhost:3000` — web interface for chat
+
+**What's included:**
+
+- Real 561M parameter AI model (NanoChat) — **baked into the image by default**
+- Python runtime with PyTorch
+- Realistic inference latency
+
+**Startup time:** ~5 seconds (model is pre-baked in the image)  
+**First build:** ~3-5 minutes (builds image with embedded model, one-time only)  
+**Subsequent runs:** ~5 seconds (uses cached baked image)
+
+**If you prefer a smaller image without the baked model:**
+
+```bash
+BAKED=false make compose-up
+# First run downloads model (~1.9GB) at startup (~45 seconds)
+# Subsequent runs: ~5 seconds (uses downloaded cache)
+```
+
+**Test it:**
+
+```bash
+make open  # Opens Web UI in browser
+# Or test with the real model:
+curl http://localhost:8090/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"nanochat","messages":[{"role":"user","content":"Explain AI briefly"}],"stream":true}'
+```
+
+**Stop it:**
+
+```bash
 make compose-down
-
 ```
 
-Open Web UI (optional):
+---
 
-The included `docker-compose.yml` also adds an optional `openwebui` service (Open Web UI) configured to route OpenAI-style API requests to the simulator. You can run the full stack with:
+### Comparison Table
 
-```bash
-make compose-up
-```
+| Feature | Pure Simulation | With NanoChat (Baked) |
+|---------|-----------------|----------------------|
+| **Startup Time** | ~2 seconds | ~5 seconds |
+| **First Build Time** | N/A | ~3-5 minutes (one-time) |
+| **Model Size** | None | ~2GB baked in image |
+| **AI Quality** | Fake/deterministic | Real 561M parameter model |
+| **Response Time** | Instant | 2-10 seconds |
+| **CPU/Memory** | Minimal | ~4GB RAM, full CPU during inference |
+| **Best For** | Testing, CI/CD | Production testing, benchmarking |
 
-After the compose stack starts, Open Web UI will be available at <http://localhost:3000> and will send OpenAI-compatible API calls to the simulator service at `http://simulator:3080`.
+---
 
-The Open Web UI container uses the environment variable `OPENAI_API_BASE_URL` to route OpenAI API calls. `docker-compose.yml` sets this to the `simulator` service. If you run Open Web UI separately, you can set the env var like this:
+### Open Web UI Configuration
 
-```bash
-docker run -d -p 3000:8080 -e OPENAI_API_BASE_URL=http://host.docker.internal:3080 \
-  -e OPENAI_API_KEY=simulator -v open-webui:/app/backend/data ghcr.io/open-webui/open-webui:main
-```
+Both modes include Open Web UI pre-configured to connect to the simulator. No additional setup needed!
 
-Notes:
+**How to connect in the UI:**
 
-- `OPENAI_API_KEY` is required by Open Web UI when calling an OpenAI-compatible API, but the simulator currently does not enforce API keys; you can use any token.
-- `WEBUI_AUTH=False` is set in the compose file so you don't need to sign in for local testing; remove it for multi-user setups.
+1. Open Web UI is at `http://localhost:3000`
+2. Click the **Settings** (gear icon) at the bottom left
+3. Go to **Connections** tab
+4. Under **OpenAI API Base URL**, set it to: `http://simulator:8090`
+5. Under **OpenAI API Key**, set it to any value (e.g., `simulator`)
+6. Click **Test Connection** to verify
+7. Refresh and you should see the models from the simulator
 
-Troubleshooting Open Web UI errors (500/No models)
+**Or use the environment-provided defaults:**
 
-- If Open Web UI shows a 500 page or no models are visible, follow these steps:
-  1. Check the UI logs: `docker compose logs openwebui` — Open Web UI will report HTTP errors it receives from the backend.
-  2. Confirm the simulator is reachable from inside the `openwebui` container: `docker compose exec openwebui curl -sS http://simulator:3080/v1/models`.
-  3. If you see a 404 calling `/models`, note this repo exposes both `/v1/models` and legacy `/models` to maximize compatibility.
-  4. Tail the simulator logs to see request traces (we log method/path): `docker compose logs simulator`
-  5. If the UI still fails with `Not authenticated`, check the `OPENAI_API_KEY` and the UI config — the simulator does not validate tokens, but Open Web UI still sends the header.
+The docker-compose.yml already sets these environment variables in the openwebui service:
 
-### Makefile
+- `OPENAI_API_BASE_URL` — Points to the simulator service (`http://simulator:8090`)
+- `OPENAI_API_KEY` — Can be any value (simulator doesn't enforce keys)
+- `WEBUI_AUTH=False` — Disabled for local testing
 
-This repo ships a convenient `Makefile` with ergonomic commands; run `make help` to see available commands and examples. Highlights:
+However, you may still need to manually configure the connection in the UI settings if Open Web UI doesn't auto-detect them.
 
-- `make compose-up` — start the full compose stack including the `openwebui` service.
-- `make compose-openwebui` — start only the Open WebUI service via compose (simulator will start as dependency if needed).
-- `make compose-logs` — tail compose logs for debugging.
-- `make docker-run-openwebui` — run the Open WebUI container and point it at your host `simulator` (convenient if you don't want to use compose).
+To enable authentication for multi-user setups, edit `docker-compose.yml` or `docker-compose.noai.yml` and remove `WEBUI_AUTH=False`.
+
+### Troubleshooting Open Web UI
+
+If Open Web UI shows a 500 page or no models are visible:
+
+1. **Check UI logs:** `docker compose logs openwebui`
+2. **Verify simulator is reachable:** `docker compose exec openwebui curl -sS http://simulator:8090/v1/models`
+3. **Confirm the API is working:** `make curl-sim` (for pure simulation) or `make curl-stream` (with NanoChat)
+4. **Check Docker network:** Ensure both services are on the same compose network
+5. **Restart the stack:** `make compose-down && make compose-up`
+
+### Makefile Quick Reference
+
+This repo ships a convenient `Makefile` with ergonomic commands; run `make help` to see the full list. Key commands:
+
+**Docker Compose (Recommended):**
+
+- `make compose-up` — Start API + NanoChat Inference + Web UI (real AI)
+- `make compose-down` — Stop the full stack
+- `make compose-up-noai` — Start API + Web UI (pure simulation, no AI model)
+- `make compose-down-noai` — Stop the no-AI stack
+- `make compose-logs` — Tail logs from all services
+- `make open` — Open Web UI in your browser
+
+**Local Development:**
+
+- `make build` — Build the Go binary
+- `make run-sim` — Run pure simulation (no setup needed)
+- `make setup-dev` — One-time setup for local NanoChat inference
+- `make local-dev` — Run API with real NanoChat inference locally
+
+**Testing:**
+
+- `make test` — Run Go test suite
+- `make curl-sim` — Test pure simulation API
+- `make curl-stream` — Test NanoChat streaming
+- `make curl-text` — Test NanoChat non-streaming
+
+## 📚 Documentation
+
+Comprehensive guides and references are available in the `docs/` directory:
+
+- **[docs/README.md](docs/README.md)** — Documentation index with learning paths
+- **[docs/01-implementation-complete.md](docs/01-implementation-complete.md)** — Complete implementation summary with all phases and architecture
+- **[docs/02-implementation-guide.md](docs/02-implementation-guide.md)** — Step-by-step implementation details with code examples
+- **[docs/03-setup-and-deployment.md](docs/03-setup-and-deployment.md)** — Local dev setup, Docker deployment, troubleshooting, and performance tuning
+- **[docs/04-nanochat-pytorch.md](docs/04-nanochat-pytorch.md)** — PyTorch inference details, device management, and model specifications
+
+Start with the [docs/README.md](docs/README.md) for a guided path based on your goals.
 
 ## Example Requests
 
@@ -116,7 +285,7 @@ Streaming examples (SSE):
 Stream a completion with SSE (shell-friendly):
 
 ```bash
-curl -N -X POST http://localhost:3080/v1/chat/completions \
+curl -N -X POST http://localhost:8090/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"gpt-sim-1","messages":[{"role":"user","content":"Hello"}],"stream":true}'
 ```
@@ -152,7 +321,7 @@ Non-streaming JSON completion:
 Structured JSON response example (response_format: json_schema):
 
 ```bash
-curl -X POST http://localhost:3080/v1/chat/completions \
+curl -X POST http://localhost:8090/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"gpt-sim-1","messages":[{"role":"user","content":"Give me a Person JSON"}],"response_format":{"type":"json_schema","json_schema":{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"integer"},"email":{"type":"string","format":"email"}},"required":["name","email"]}}}'
 ```
@@ -181,7 +350,7 @@ Features
 
 
 ```bash
-curl -X POST http://localhost:3080/v1/chat/completions \
+curl -X POST http://localhost:8090/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"gpt-sim-1","messages":[{"role":"user","content":"Hello"}],"stream":false}'
 ```
@@ -223,7 +392,7 @@ If you have trouble building due to module mismatch, run the following:
 make setup
 # Build and run
 make build
-make run PORT=3080
+make run PORT=8090
 ```
 
 If your editor or other tools still show import errors, run `go env GOPROXY` and ensure that the module proxy is reachable. If you don't want the `replace` during CI, remove it in the `go.mod` or use environment overrides when CI runs.

@@ -1,0 +1,48 @@
+services:
+  simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile.noai
+      args:
+        BINARY: ${BINARY:-server}
+    image: ${SIM_IMAGE:-openai-api-simulator:noai-latest}
+    ports:
+      - "8090:8090"
+    environment:
+      - GIN_MODE=release
+      # Default streaming behavior for a realistic local dev environment
+      # jitter: randomized per-chunk delay between STREAM_DELAY_MIN_MS
+      # and STREAM_DELAY_MAX_MS (in ms).
+      - STREAM_DELAY_MIN_MS=50
+      - STREAM_DELAY_MAX_MS=300
+      # Approximate token emission rate for streaming chunks. ~40 tokens/sec
+      # mirrors rough throughput for modern LLMs in local testing.
+      - STREAM_TOKENS_PER_SECOND=40
+      # Default response length option used when client doesn't set
+      # `response_length`. Supported: short|medium|long. Empty (default)
+      # lets the simulator infer length from the prompt.
+      - STREAM_DEFAULT_RESPONSE_LENGTH=medium
+    command: ["-port", "8090"]
+
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    restart: unless-stopped
+    ports:
+      - "3000:8080" # open-webui default UI port
+    environment:
+      # Tell Open WebUI to use the simulator as an OpenAI-compatible backend
+      - OPENAI_API_BASE_URL=http://simulator:8090
+      # Open WebUI expects a key to be set when using OpenAI API flow; the simulator does not validate keys
+      - OPENAI_API_KEY=simulator
+      # Disable auth for quick local development
+      - WEBUI_AUTH=False
+      # Open Web UI specific configuration
+      - ENABLE_OPENAI_API=True
+      - DEFAULT_USER_ROLE=admin
+    volumes:
+      - open-webui:/app/backend/data
+    depends_on:
+      - simulator
+
+volumes:
+  open-webui:

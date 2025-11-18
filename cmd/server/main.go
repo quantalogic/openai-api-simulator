@@ -23,6 +23,11 @@ func main() {
 	delayMax := flag.Int("stream_delay_max_ms", 0, "Default max per-chunk delay (ms) to simulate jitter when stream_options missing")
 	tokensPerSec := flag.Float64("stream_tokens_per_second", 0, "Default token emission rate for streaming chunks; 0 disables throttling")
 	defaultResponseLength := flag.String("stream_default_response_length", "", "Optional default response length when unspecified: short|medium|long; empty = infer from messages")
+
+	// Nanochat proxy mode flags
+	nanochatEnabled := flag.Bool("nanochat-enabled", false, "Enable nanochat proxy mode")
+	nanochatUpstreamURL := flag.String("nanochat-upstream-url", "http://127.0.0.1:8081", "Upstream llama.cpp server URL")
+
 	flag.Parse()
 
 	addr := fmt.Sprintf(":%d", *port)
@@ -68,7 +73,7 @@ func main() {
 		}
 	}
 
-	handler := server.NewRouterWithStreamDefaults(defaults, *defaultResponseLength)
+	handler := server.NewRouterWithStreamDefaults(defaults, *defaultResponseLength, *nanochatEnabled, *nanochatUpstreamURL)
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}

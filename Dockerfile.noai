@@ -1,0 +1,30 @@
+## Stage 1: Build Go binary
+FROM golang:1.22-alpine AS go-build
+RUN apk add --no-cache git
+WORKDIR /workspace
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+ARG BINARY=server
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /workspace/${BINARY} ./cmd/${BINARY}
+
+## Stage 2: Lightweight runtime (no Python/PyTorch)
+FROM alpine:latest
+ARG BINARY=server
+
+# Install minimal dependencies (just curl for health checks)
+RUN apk add --no-cache ca-certificates curl
+
+# Create app directory
+WORKDIR /app
+
+# Copy Go binary from build stage
+COPY --from=go-build /workspace/${BINARY} /app/server
+
+# Expose port
+EXPOSE 8090
+
+# Set default Go server entrypoint (no NanoChat inference)
+# (docker-compose will provide the full command including port and other flags)
+ENTRYPOINT ["/app/server"]
+CMD []

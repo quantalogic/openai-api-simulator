@@ -1,9 +1,34 @@
 services:
-  simulator:
-    build: .
-    image: openai-api-simulator:latest
+  inference:
+    build:
+      context: .
+      args:
+        BINARY: ${BINARY:-server}
+        BAKED: ${BAKED:-true}
+    image: ${SIM_IMAGE:-openai-api-simulator:latest}
     ports:
-      - "3080:3080"
+      - "8081:8081"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/opt/nanochat
+    entrypoint: []
+    command: python /app/inference_server.py --port 8081 --host 0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 180s
+
+  simulator:
+    build:
+      context: .
+      args:
+        BINARY: ${BINARY:-server}
+        BAKED: ${BAKED:-true}
+    image: ${SIM_IMAGE:-openai-api-simulator:latest}
+    ports:
+      - "8090:8090"
     environment:
       - GIN_MODE=release
       # Default streaming behavior for a realistic local dev environment
@@ -18,6 +43,11 @@ services:
       # `response_length`. Supported: short|medium|long. Empty (default)
       # lets the simulator infer length from the prompt.
       - STREAM_DEFAULT_RESPONSE_LENGTH=medium
+      - PYTHONUNBUFFERED=1
+    command: ["-port", "8090", "-nanochat-enabled", "-nanochat-upstream-url=http://inference:8081"]
+    depends_on:
+      inference:
+        condition: service_healthy
 
   openwebui:
     image: ghcr.io/open-webui/open-webui:main
@@ -26,11 +56,14 @@ services:
       - "3000:8080" # open-webui default UI port
     environment:
       # Tell Open WebUI to use the simulator as an OpenAI-compatible backend
-      - OPENAI_API_BASE_URL=http://simulator:3080
+      - OPENAI_API_BASE_URL=http://simulator:8090
       # Open WebUI expects a key to be set when using OpenAI API flow; the simulator does not validate keys
       - OPENAI_API_KEY=simulator
       # Disable auth for quick local development
       - WEBUI_AUTH=False
+      # Open Web UI specific configuration
+      - ENABLE_OPENAI_API=True
+      - DEFAULT_USER_ROLE=admin
     volumes:
       - open-webui:/app/backend/data
     depends_on:

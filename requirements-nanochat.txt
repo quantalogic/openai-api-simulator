@@ -1,0 +1,19 @@
+# Python dependencies for nanochat inference server
+
+# Core dependencies
+torch>=2.0.0          # PyTorch deep learning framework
+transformers>=4.30.0  # For tokenizer support (if needed)
+
+# Web server
+fastapi>=0.104.0      # Fast web framework
+uvicorn>=0.24.0       # ASGI server
+pydantic>=2.0.0       # Data validation
+
+# Optional: GPU support (auto-detected by torch)
+# If using CUDA, ensure CUDA toolkit 12.1+ is installed
+# For Apple Silicon (MPS), use torch built with MPS support
+
+# Development (optional)
+# pytest>=7.0.0        # Testing framework
+# pytest-asyncio>=0.21.0  # Async test support
+# black>=23.0.0        # Code formatting
