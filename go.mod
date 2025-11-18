@@ -12,6 +12,14 @@ require (
 // to this local code. This keeps `quantalogic` as the canonical module
 // path for commits and CI but allows local forks that still reference
 // `github.com/openai/openai-api-simulator` to work without network fetch.
+// Historically this project was forked from `github.com/openai/openai-api-simulator`.
+// To maintain compatibility with forks and older import paths, map the old
+// upstream module to the local repository root when developing locally.
+//
+// Note: the canonical module path for this repo is
+// `github.com/quantalogic/openai-api-simulator` (see top-level `module`)
+// so this replace directive can be removed for CI or if you prefer strict
+// import path checks.
 replace github.com/openai/openai-api-simulator => .
 
 require (
