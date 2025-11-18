@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"time"
-	"strings"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/quantalogic/openai-api-simulator/pkg/streaming"
 

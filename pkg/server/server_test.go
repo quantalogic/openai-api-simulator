@@ -17,7 +17,7 @@ import (
 
 func TestRouter_UsesStreamDefaults(t *testing.T) {
 	defaults := streaming.StreamOptions{DelayMin: time.Millisecond, DelayMax: 2 * time.Millisecond, TokensPerSecond: 1000}
-	s := httptest.NewServer(NewRouterWithStreamDefaults(defaults))
+	s := httptest.NewServer(NewRouterWithStreamDefaults(defaults, ""))
 	defer s.Close()
 
 	payload := models.ChatCompletionRequest{
