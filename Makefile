@@ -10,7 +10,7 @@ IMAGE?=openai-api-simulator:latest
 setup:
 	@echo "Preparing development environment: run 'go mod tidy'"
 	@echo "Setting GOPRIVATE to prevent proxy lookups for local module..."
-	GOPRIVATE=github.com/quantalogic go mod tidy
+	export GOPRIVATE=github.com/quantalogic && go mod tidy
 
 all: build
 
@@ -24,7 +24,7 @@ test:
 	go test ./... -v
 
 tidy:
-	GOPRIVATE=github.com/quantalogic go mod tidy
+	export GOPRIVATE=github.com/quantalogic && go mod tidy
 
 fmt:
 	gofmt -w .
