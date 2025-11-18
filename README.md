@@ -164,9 +164,9 @@ If you omit `response_length`, the simulator will pick a short/medium/long answe
 
 Length semantics and behavior
 
-- `short` — typically 30–140 characters (useful for short replies, quick suggestions)
-- `medium` — typically 120–360 characters (the default)
-- `long` — typically 360–1200 characters (paragraphs and detailed responses)
+- `short` — typically 120–450 characters (useful for short replies but longer than a single sentence)
+- `medium` — typically 450–1500 characters (the default; multi-sentence / paragraph style)
+- `long` — typically 1500–5000 characters (paragraphs and detailed responses)
 
 If you omit `response_length` the server uses `MapResponseLengthToRangeForMessages` to make an informed random choice based on the average length of your supplied messages. This makes end-to-end UI tests more realistic — short prompts get short replies, longer prompts get more verbose responses, and there is a random component for variation.
 

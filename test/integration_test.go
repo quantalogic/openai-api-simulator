@@ -61,7 +61,7 @@ func TestResponseLengthShort(t *testing.T) {
 	var out models.ChatCompletion
 	err = json.NewDecoder(resp.Body).Decode(&out)
 	require.NoError(t, err)
-	require.LessOrEqual(t, len(out.Choices[0].Message.Content), 140)
+	require.LessOrEqual(t, len(out.Choices[0].Message.Content), 450)
 }
 
 func TestResponseLengthLong(t *testing.T) {
@@ -83,7 +83,9 @@ func TestResponseLengthLong(t *testing.T) {
 	var out models.ChatCompletion
 	err = json.NewDecoder(resp.Body).Decode(&out)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(out.Choices[0].Message.Content), 360)
+	// allow some variance due to sentence boundary truncation; expect a
+	// substantial output for 'long' but be tolerant of minor variance.
+	require.GreaterOrEqual(t, len(out.Choices[0].Message.Content), 1200)
 }
 
 func TestModelsEndpoint(t *testing.T) {

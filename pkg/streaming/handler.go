@@ -187,11 +187,18 @@ func (h *SSEStreamHandler) StreamCompletion(
 func MapResponseLengthToRange(profile string) (int, int) {
 	switch profile {
 	case "short":
-		return 30, 140
+		// Increase short to produce slightly longer short replies so UI
+		// examples and smoke tests look more realistic (more than a single
+		// sentence).
+		return 120, 450
 	case "long":
-		return 360, 1200
+		// Long responses should allow multi-paragraph outputs; make them
+		// substantially larger than before.
+		return 1500, 5000
 	default:
-		return 120, 360
+		// Medium is the default; bump to a larger range so UIs receive
+		// richer responses by default.
+		return 450, 1500
 	}
 }
 
