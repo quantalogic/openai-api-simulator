@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/openai/openai-api-simulator/pkg/utils"
+	"github.com/quantalogic/openai-api-simulator/pkg/utils"
 )
 
 // TextGenerator defines the interface for generating text

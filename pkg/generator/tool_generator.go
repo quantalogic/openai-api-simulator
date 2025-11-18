@@ -7,8 +7,8 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/openai/openai-api-simulator/pkg/models"
-	"github.com/openai/openai-api-simulator/pkg/utils"
+	"github.com/quantalogic/openai-api-simulator/pkg/models"
+	"github.com/quantalogic/openai-api-simulator/pkg/utils"
 )
 
 // ToolCallStrategy controls how tools are invoked.

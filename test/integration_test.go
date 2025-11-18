@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/openai/openai-api-simulator/pkg/models"
-	"github.com/openai/openai-api-simulator/pkg/server"
+	"github.com/quantalogic/openai-api-simulator/pkg/models"
+	"github.com/quantalogic/openai-api-simulator/pkg/server"
 	"github.com/stretchr/testify/require"
 )
 

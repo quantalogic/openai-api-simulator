@@ -7,6 +7,9 @@ OPENWEBUI_PORT?=3000
 IMAGE?=openai-api-simulator:latest
 
 .PHONY: all build run test tidy clean fmt help compose-logs compose-openwebui docker-run-openwebui docker-run docker-clean open
+setup:
+	@echo "Preparing development environment: run 'go mod tidy'"
+	go mod tidy
 
 all: build
 

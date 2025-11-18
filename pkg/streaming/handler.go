@@ -10,25 +10,25 @@ import (
 	"sync"
 	"time"
 
-	"github.com/openai/openai-api-simulator/pkg/generator"
-	"github.com/openai/openai-api-simulator/pkg/models"
-	"github.com/openai/openai-api-simulator/pkg/utils"
+	"github.com/quantalogic/openai-api-simulator/pkg/generator"
+	"github.com/quantalogic/openai-api-simulator/pkg/models"
+	"github.com/quantalogic/openai-api-simulator/pkg/utils"
 )
 
 // StreamOptions configures the streaming session.
 type StreamOptions struct {
-	IncludeUsage      bool
-	ChunkSize         int
+	IncludeUsage bool
+	ChunkSize    int
 	// Delay represents an explicit fixed delay after each chunk. Prefer
 	// using DelayMin/Max for variance; Delay is kept for backwards
 	// compatibility with internal calls.
-	Delay             time.Duration
+	Delay time.Duration
 
 	// DelayMin/DelayMax represent a randomized jitter range applied
 	// per-chunk. When set, each chunk will sleep for a uniform random
 	// time between DelayMin and DelayMax.
-	DelayMin          time.Duration
-	DelayMax          time.Duration
+	DelayMin time.Duration
+	DelayMax time.Duration
 
 	// TokensPerSecond, when >0, throttles output to roughly this
 	// token emission rate. It ensures that larger chunks take longer
@@ -296,7 +296,7 @@ func (h *SSEStreamHandler) streamTextChunks(
 		if opts.TokensPerSecond > 0 {
 			tokens := utils.EstimateTokens(chunkText)
 			// tokens/sec -> seconds
-			dur := time.Duration(float64(tokens)/opts.TokensPerSecond*float64(time.Second))
+			dur := time.Duration(float64(tokens) / opts.TokensPerSecond * float64(time.Second))
 			// if the tokens-based sleep is larger than the previous one
 			// we need to wait the extra time.
 			if dur > 0 {
@@ -406,7 +406,7 @@ func (h *SSEStreamHandler) streamToolCallChunks(
 						}
 						if opts.TokensPerSecond > 0 {
 							tokens := utils.EstimateTokens(args[j:end])
-							dur := time.Duration(float64(tokens)/opts.TokensPerSecond*float64(time.Second))
+							dur := time.Duration(float64(tokens) / opts.TokensPerSecond * float64(time.Second))
 							if dur > 0 {
 								time.Sleep(dur)
 							}
@@ -456,25 +456,25 @@ func (h *SSEStreamHandler) streamToolCallChunks(
 						}},
 					},
 				}, nil)
-					// Sleep by jitter / fixed delay then throttle by token rate
-					if opts.DelayMin > 0 || opts.DelayMax > 0 {
-						min := opts.DelayMin
-						max := opts.DelayMax
-						if max < min {
-							max = min
-						}
-						d := time.Duration(rand.Int63n(int64(max-min)+1)) + min
-						time.Sleep(d)
-					} else if opts.Delay > 0 {
-						time.Sleep(opts.Delay)
+				// Sleep by jitter / fixed delay then throttle by token rate
+				if opts.DelayMin > 0 || opts.DelayMax > 0 {
+					min := opts.DelayMin
+					max := opts.DelayMax
+					if max < min {
+						max = min
 					}
-					if opts.TokensPerSecond > 0 {
-						tokens := utils.EstimateTokens(args[j:end])
-						dur := time.Duration(float64(tokens)/opts.TokensPerSecond*float64(time.Second))
-						if dur > 0 {
-							time.Sleep(dur)
-						}
+					d := time.Duration(rand.Int63n(int64(max-min)+1)) + min
+					time.Sleep(d)
+				} else if opts.Delay > 0 {
+					time.Sleep(opts.Delay)
+				}
+				if opts.TokensPerSecond > 0 {
+					tokens := utils.EstimateTokens(args[j:end])
+					dur := time.Duration(float64(tokens) / opts.TokensPerSecond * float64(time.Second))
+					if dur > 0 {
+						time.Sleep(dur)
 					}
+				}
 			}
 		}
 	}

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/openai/openai-api-simulator/pkg/models"
+	"github.com/quantalogic/openai-api-simulator/pkg/models"
 	"github.com/stretchr/testify/require"
 )
 

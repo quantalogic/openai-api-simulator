@@ -2,12 +2,12 @@ package streaming
 
 import (
 	"context"
-	"time"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/openai/openai-api-simulator/pkg/models"
+	"github.com/quantalogic/openai-api-simulator/pkg/models"
 	"github.com/stretchr/testify/require"
 )
 

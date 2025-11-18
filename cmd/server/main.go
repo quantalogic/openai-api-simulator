@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/openai/openai-api-simulator/pkg/streaming"
+	"github.com/quantalogic/openai-api-simulator/pkg/streaming"
 
-	"github.com/openai/openai-api-simulator/pkg/server"
+	"github.com/quantalogic/openai-api-simulator/pkg/server"
 )
 
 func main() {

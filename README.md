@@ -211,6 +211,23 @@ Developer notes
 - Response length mapping: `pkg/streaming/handler.go` exports `MapResponseLengthToRange` and `MapResponseLengthToRangeForMessages`; these pick short/medium/long ranges and introduce randomness based on the input.
 - The HTTP router is in `pkg/server/server.go`. It intentionally registers both `/v1/models` and `/models` to support UIs that expect legacy endpoints.
 
+Local development and building from a clone
+
+- After cloning, run `make setup` to fetch modules and ensure `go.mod` is tidy.
+- The canonical module path for commits/CI is `github.com/quantalogic/openai-api-simulator` (the value in `go.mod`). If you fork or previously used an older clone that references `github.com/openai/openai-api-simulator`, we've added a local dev mapping so your local copy still builds. The repository uses a `replace` in `go.mod` which maps `github.com/openai/openai-api-simulator` to the local directory; this ensures that old import paths found in forks will continue to work on your machine.
+
+If you have trouble building due to module mismatch, run the following:
+
+```bash
+# Refresh module graph and downloads
+make setup
+# Build and run
+make build
+make run PORT=3080
+```
+
+If your editor or other tools still show import errors, run `go env GOPROXY` and ensure that the module proxy is reachable. If you don't want the `replace` during CI, remove it in the `go.mod` or use environment overrides when CI runs.
+
 Contribution guide
 
 - Add tests to `pkg/generator` for any new text shapes.
