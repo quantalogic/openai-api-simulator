@@ -62,6 +62,11 @@ open:
 
 compose-up:
 	docker compose up --build -d
+	@echo
+	@echo "✅ Services started. You can open the Open Web UI in your browser at:"
+	@echo "   http://localhost:$(OPENWEBUI_PORT)"
+	@echo "If you prefer, run 'make open' to open it automatically on macOS, or open the URL in your browser." 
+	@echo
 
 compose-down:
 	docker compose down
