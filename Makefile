@@ -10,8 +10,6 @@ SHELL := /bin/bash
 .PHONY: all build run test tidy clean fmt help compose-logs compose-openwebui docker-run-openwebui docker-run docker-clean open setup
 setup:
 	@echo "Preparing development environment..."
-	@echo "Setting GOPRIVATE to prevent proxy lookups for private modules..."
-	go env -w GOPRIVATE=github.com/quantalogic
 	@echo "Setting GO111MODULE=on for proper module handling..."
 	go env -w GO111MODULE=on
 	@echo "Downloading dependencies..."
