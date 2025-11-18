@@ -12,22 +12,13 @@ require (
 // to this local code. This keeps `quantalogic` as the canonical module
 // path for commits and CI but allows local forks that still reference
 // `github.com/openai/openai-api-simulator` to work without network fetch.
-// Historically this project was forked from `github.com/openai/openai-api-simulator`.
-// To maintain compatibility with forks and older import paths, map the old
-// upstream module to the local repository root when developing locally.
-//
-// Note: the canonical module path for this repo is
-// `github.com/quantalogic/openai-api-simulator` (see top-level `module`)
-// so this replace directive can be removed for CI or if you prefer strict
-// import path checks.
-replace github.com/openai/openai-api-simulator v0.0.0 => .
+replace github.com/openai/openai-api-simulator => .
 
 // The canonical module path `github.com/quantalogic/openai-api-simulator` must
 // also be replaced locally to prevent Go from querying the proxy during
-// `go mod tidy`. This is essential for local development and for users cloning
-// the repository fresh. The version constraint v1.0.0 is arbitrary and matches
-// any local import; Go will use the local directory instead of the proxy.
-replace github.com/quantalogic/openai-api-simulator v1.0.0 => .
+// `go mod tidy`. With GOPRIVATE set to github.com/quantalogic in the Makefile,
+// Go will skip proxy lookups and use the local directory instead.
+replace github.com/quantalogic/openai-api-simulator => .
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
