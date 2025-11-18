@@ -6,11 +6,14 @@ SIM_PORT?=3080
 OPENWEBUI_PORT?=3000
 IMAGE?=openai-api-simulator:latest
 
+# Export GOPRIVATE to prevent Go from querying the proxy for private modules
+export GOPRIVATE := github.com/quantalogic
+
 .PHONY: all build run test tidy clean fmt help compose-logs compose-openwebui docker-run-openwebui docker-run docker-clean open
 setup:
 	@echo "Preparing development environment: run 'go mod tidy'"
-	@echo "Setting GOPRIVATE to prevent proxy lookups for local module..."
-	export GOPRIVATE=github.com/quantalogic && go mod tidy
+	@echo "Setting GOPRIVATE=$(GOPRIVATE) to prevent proxy lookups for local module..."
+	go mod tidy
 
 all: build
 
@@ -24,7 +27,7 @@ test:
 	go test ./... -v
 
 tidy:
-	export GOPRIVATE=github.com/quantalogic && go mod tidy
+	go mod tidy
 
 fmt:
 	gofmt -w .
