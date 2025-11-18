@@ -22,6 +22,15 @@ require (
 // import path checks.
 replace github.com/openai/openai-api-simulator => .
 
+// While the module's canonical path is `github.com/quantalogic/openai-api-simulator`,
+// some tooling environments (or users with GO111MODULE=auto) may still try to
+// resolve the canonical module from the network. For development convenience
+// we offer an optional local replace that ensures the root module resolves to
+// the local copy rather than fetching it from the Go proxy. This is useful when
+// you're working on the code locally and don't want the module to be looked up
+// remotely. Remove this for CI if you need the proxy behavior.
+replace github.com/quantalogic/openai-api-simulator => .
+
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
