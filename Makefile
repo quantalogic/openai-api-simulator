@@ -7,15 +7,16 @@ OPENWEBUI_PORT?=3000
 IMAGE?=openai-api-simulator:latest
 SHELL := /bin/bash
 
-.PHONY: all build run test tidy clean fmt help compose-logs compose-openwebui docker-run-openwebui docker-run docker-clean open
+.PHONY: all build run test tidy clean fmt help compose-logs compose-openwebui docker-run-openwebui docker-run docker-clean open setup
 setup:
 	@echo "Preparing development environment..."
 	@echo "Setting GOPRIVATE to prevent proxy lookups for private modules..."
 	go env -w GOPRIVATE=github.com/quantalogic
 	@echo "Running 'go mod tidy'..."
 	go mod tidy
+	@echo "✓ Setup complete! You can now run 'make build' or 'make test'."
 
-all: build
+all: setup build
 
 build:
 	go build -o $(BINARY) ./cmd/server
