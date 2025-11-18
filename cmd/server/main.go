@@ -6,6 +6,9 @@ import (
 	"log"
 	"net/http"
 	"time"
+	"strings"
+	"os"
+	"strconv"
 
 	"github.com/quantalogic/openai-api-simulator/pkg/streaming"
 
@@ -19,6 +22,7 @@ func main() {
 	delayMin := flag.Int("stream_delay_min_ms", 0, "Default min per-chunk delay (ms) to simulate jitter when stream_options missing")
 	delayMax := flag.Int("stream_delay_max_ms", 0, "Default max per-chunk delay (ms) to simulate jitter when stream_options missing")
 	tokensPerSec := flag.Float64("stream_tokens_per_second", 0, "Default token emission rate for streaming chunks; 0 disables throttling")
+	defaultResponseLength := flag.String("stream_default_response_length", "", "Optional default response length when unspecified: short|medium|long; empty = infer from messages")
 	flag.Parse()
 
 	addr := fmt.Sprintf(":%d", *port)
@@ -33,8 +37,38 @@ func main() {
 	if *tokensPerSec > 0 {
 		defaults.TokensPerSecond = *tokensPerSec
 	}
+	// Fallback to environment variables for Docker / compose if flags are not
+	// explicitly provided. This makes it convenient to configure realistic
+	// latency and throughput when running the `docker-compose` stack.
+	if defaults.DelayMin == 0 {
+		if v := os.Getenv("STREAM_DELAY_MIN_MS"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				defaults.DelayMin = time.Duration(n) * time.Millisecond
+			}
+		}
+	}
+	if defaults.DelayMax == 0 {
+		if v := os.Getenv("STREAM_DELAY_MAX_MS"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				defaults.DelayMax = time.Duration(n) * time.Millisecond
+			}
+		}
+	}
+	if defaults.TokensPerSecond == 0 {
+		if v := os.Getenv("STREAM_TOKENS_PER_SECOND"); v != "" {
+			if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+				defaults.TokensPerSecond = f
+			}
+		}
+	}
+	if *defaultResponseLength == "" {
+		if v := os.Getenv("STREAM_DEFAULT_RESPONSE_LENGTH"); v != "" {
+			// Normalize to lowercase
+			*defaultResponseLength = strings.ToLower(v)
+		}
+	}
 
-	handler := server.NewRouterWithStreamDefaults(defaults)
+	handler := server.NewRouterWithStreamDefaults(defaults, *defaultResponseLength)
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}

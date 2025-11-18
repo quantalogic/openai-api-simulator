@@ -46,12 +46,12 @@ func toStreamingRequest(in models.ChatCompletionRequest) *streaming.ChatCompleti
 
 // NewRouter returns an http.Handler that exposes simulated endpoints.
 func NewRouter() http.Handler {
-	return NewRouterWithStreamDefaults(streaming.StreamOptions{})
+	return NewRouterWithStreamDefaults(streaming.StreamOptions{}, "")
 }
 
 // NewRouterWithStreamDefaults returns a router that applies the provided
 // defaults when an incoming request does not supply `stream_options`.
-func NewRouterWithStreamDefaults(defaults streaming.StreamOptions) http.Handler {
+func NewRouterWithStreamDefaults(defaults streaming.StreamOptions, defaultResponseLength string) http.Handler {
 	mux := http.NewServeMux()
 
 	sseHandler := streaming.NewSSEStreamHandlerWithDefaults(defaults)
@@ -123,7 +123,20 @@ func NewRouterWithStreamDefaults(defaults streaming.StreamOptions) http.Handler 
 			// normalization heuristics for response length (chosen using
 			// `response_length` or inferred from the input messages).
 			sreq := toStreamingRequest(in)
-			minLen, maxLen := streaming.MapResponseLengthToRangeForMessages(in.ResponseLength, sreq.Messages)
+			// If a default response length is configured and the client did
+			// not specify one, set it so the streaming generator uses the
+			// configured default.
+			if sreq.ResponseLength == "" && defaultResponseLength != "" {
+				sreq.ResponseLength = defaultResponseLength
+			}
+			// If a default response length is configured and the client did
+			// not specify one, use that default; otherwise fall back to
+			// inferred length.
+			profile := in.ResponseLength
+			if profile == "" && defaultResponseLength != "" {
+				profile = defaultResponseLength
+			}
+			minLen, maxLen := streaming.MapResponseLengthToRangeForMessages(profile, sreq.Messages)
 			text = generator.NewCoherentTextGenerator().GenerateText(r.Context(), minLen, maxLen)
 		}
 		id := utils.NewIDGenerator().GenerateID()
