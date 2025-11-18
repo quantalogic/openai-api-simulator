@@ -65,6 +65,12 @@ compose-up:
 	@echo
 	@echo "✅ Services started. You can open the Open Web UI in your browser at:"
 	@echo "   http://localhost:$(OPENWEBUI_PORT)"
+	@echo "Note: give the UI about 15s to fully initialize before clicking/refreshing the page."
+	@echo "If you prefer, run 'make open' to open it automatically on macOS, or open the URL in your browser when ready." 
+	@echo
+	@echo
+	@echo "✅ Services started. You can open the Open Web UI in your browser at:"
+	@echo "   http://localhost:$(OPENWEBUI_PORT)"
 	@echo "If you prefer, run 'make open' to open it automatically on macOS, or open the URL in your browser." 
 	@echo
 
