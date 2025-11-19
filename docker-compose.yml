@@ -44,7 +44,7 @@ services:
       # lets the simulator infer length from the prompt.
       - STREAM_DEFAULT_RESPONSE_LENGTH=medium
       - PYTHONUNBUFFERED=1
-    command: ["-port", "8090", "-nanochat-enabled", "-nanochat-upstream-url=http://inference:8081"]
+    command: ["-port", "8090", "-smollm-enabled", "-smollm-upstream-url=http://inference:8081"]
     depends_on:
       inference:
         condition: service_healthy

@@ -11,29 +11,29 @@ Why this repo is helpful
 - SSE streaming with OpenAI-compatible `data: <json>` framing
 - Structured JSON schema generation and basic tool-call simulation
 - Deterministic seeding and heuristics for reproducible tests
-- **NEW: Real AI inference with nanochat (561M parameter model)**
+- **NEW: Real AI inference with SmolLM (135M parameter model)**
 
-## 🚀 NanoChat - Real AI in One Command
+## 🚀 SmolLM - Real AI in One Command
 
-Run a **real 561M parameter AI model** with a single command:
+Run a **real 135M parameter AI model** with a single command:
 
 ```bash
-make run-nanochat
+make run-smollm
 ```
 
 Or build and run:
 
 ```bash
-make build-nanochat
-./openai-api-simulator-nanochat
+make build-smollm
+./openai-api-simulator-smollm
 ```
 
 This will:
 - ✅ Auto-detect your platform (macOS/Linux, Intel/ARM)
-- ✅ Download llama.cpp server (~50MB) and nanochat model (~316MB) on first run
+- ✅ Download llama.cpp server (~50MB) and SmolLM model (~269MB) on first run
 - ✅ Cache everything for instant subsequent starts (~2 seconds)
 - ✅ Start an OpenAI-compatible API server on port 8090
-- ✅ Provide both fake (`gpt-sim-1`) and real (`nanochat`) models
+- ✅ Provide both fake (`gpt-sim-1`) and real (`smollm`) models
 
 **First run:** ~45 seconds (downloads everything)  
 **Subsequent runs:** ~2 seconds (uses cache)
@@ -41,15 +41,15 @@ This will:
 Test the real AI model:
 
 ```bash
-curl http://localhost:8090/v1/chat/completions \
-  -d '{"model":"nanochat","messages":[{"role":"user","content":"Why is the sky blue?"}]}'
+curl http://localhost:3080/v1/chat/completions \
+  -d '{"model":"smollm","messages":[{"role":"user","content":"Why is the sky blue?"}]}'
 ```
 
 ### Available Models
 
-When running with nanochat:
+When running with SmolLM:
 - `gpt-sim-1` - Original deterministic fake model (for testing)
-- `nanochat` - Real 561M parameter model by sdobson (Andrej Karpathy's nanochat)
+- `smollm` - Real 135M parameter model by HuggingFace (SmolLM-135M)
 
 ## Running (Simulator Mode)
 
@@ -126,12 +126,9 @@ This starts:
 **Test it:**
 
 ```bash
-make open  # Opens Web UI in browser
-# Or test the API directly:
-curl http://localhost:8090/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model":"gpt-4","messages":[{"role":"user","content":"Hello"}],"stream":true}'
-```
+make curl-sim  # Test pure simulation API
+make curl-stream  # Test SmolLM streaming
+make curl-text  # Test SmolLM non-streaming
 
 **Stop it:**
 
@@ -139,7 +136,7 @@ curl http://localhost:8090/v1/chat/completions \
 make compose-down-noai
 ```
 
-### Mode 2: Full Stack with NanoChat (Real AI Model)
+### Mode 2: Full Stack with SmolLM (Real AI Model)
 
 **Best for:** Production testing, realistic inference, benchmarking, real AI responses
 
@@ -149,13 +146,13 @@ make compose-up
 
 This starts:
 
-- **API Simulator** on `http://localhost:8090` — with NanoChat inference
-- **NanoChat Inference Server** on `http://localhost:8081` — PyTorch model
+- **API Simulator** on `http://localhost:8090` — with SmolLM inference
+- **SmolLM Inference Server** on `http://localhost:8081` — PyTorch model
 - **Open Web UI** on `http://localhost:3000` — web interface for chat
 
 **What's included:**
 
-- Real 561M parameter AI model (NanoChat) — **baked into the image by default**
+- Real 135M parameter AI model (SmolLM) — **baked into the image by default**
 - Python runtime with PyTorch
 - Realistic inference latency
 
@@ -167,7 +164,7 @@ This starts:
 
 ```bash
 BAKED=false make compose-up
-# First run downloads model (~1.9GB) at startup (~45 seconds)
+# First run downloads model (~269MB) at startup (~45 seconds)
 # Subsequent runs: ~5 seconds (uses downloaded cache)
 ```
 
@@ -178,7 +175,7 @@ make open  # Opens Web UI in browser
 # Or test with the real model:
 curl http://localhost:8090/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"nanochat","messages":[{"role":"user","content":"Explain AI briefly"}],"stream":true}'
+  -d '{"model":"smollm","messages":[{"role":"user","content":"Explain AI briefly"}],"stream":true}'
 ```
 
 **Stop it:**
@@ -191,12 +188,11 @@ make compose-down
 
 ### Comparison Table
 
-| Feature | Pure Simulation | With NanoChat (Baked) |
+| Feature | Pure Simulation | With SmolLM |
 |---------|-----------------|----------------------|
-| **Startup Time** | ~2 seconds | ~5 seconds |
-| **First Build Time** | N/A | ~3-5 minutes (one-time) |
-| **Model Size** | None | ~2GB baked in image |
-| **AI Quality** | Fake/deterministic | Real 561M parameter model |
+| **Startup Time** | ~2 seconds | ~45s (first run), ~5s (cached) |
+| **Model Downloads** | None | SmolLM: ~269MB |
+| **AI Quality** | Fake/deterministic | Real model (135M parameters) |
 | **Response Time** | Instant | 2-10 seconds |
 | **CPU/Memory** | Minimal | ~4GB RAM, full CPU during inference |
 | **Best For** | Testing, CI/CD | Production testing, benchmarking |
@@ -235,7 +231,7 @@ If Open Web UI shows a 500 page or no models are visible:
 
 1. **Check UI logs:** `docker compose logs openwebui`
 2. **Verify simulator is reachable:** `docker compose exec openwebui curl -sS http://simulator:8090/v1/models`
-3. **Confirm the API is working:** `make curl-sim` (for pure simulation) or `make curl-stream` (with NanoChat)
+3. **Confirm the API is working:** `make curl-sim` (for pure simulation) or `make curl-stream` (with SmolLM)
 4. **Check Docker network:** Ensure both services are on the same compose network
 5. **Restart the stack:** `make compose-down && make compose-up`
 
@@ -245,7 +241,7 @@ This repo ships a convenient `Makefile` with ergonomic commands; run `make help`
 
 **Docker Compose (Recommended):**
 
-- `make compose-up` — Start API + NanoChat Inference + Web UI (real AI)
+- `make compose-up` — Start API + SmolLM Inference + Web UI (real AI)
 - `make compose-down` — Stop the full stack
 - `make compose-up-noai` — Start API + Web UI (pure simulation, no AI model)
 - `make compose-down-noai` — Stop the no-AI stack
@@ -256,15 +252,15 @@ This repo ships a convenient `Makefile` with ergonomic commands; run `make help`
 
 - `make build` — Build the Go binary
 - `make run-sim` — Run pure simulation (no setup needed)
-- `make setup-dev` — One-time setup for local NanoChat inference
-- `make local-dev` — Run API with real NanoChat inference locally
+- `make setup-dev` — One-time setup for local SmolLM inference
+- `make local-dev` — Run API with real SmolLM inference locally
 
 **Testing:**
 
 - `make test` — Run Go test suite
 - `make curl-sim` — Test pure simulation API
-- `make curl-stream` — Test NanoChat streaming
-- `make curl-text` — Test NanoChat non-streaming
+- `make curl-stream` — Test SmolLM streaming
+- `make curl-text` — Test SmolLM non-streaming
 
 ## 📚 Documentation
 
@@ -274,7 +270,7 @@ Comprehensive guides and references are available in the `docs/` directory:
 - **[docs/01-implementation-complete.md](docs/01-implementation-complete.md)** — Complete implementation summary with all phases and architecture
 - **[docs/02-implementation-guide.md](docs/02-implementation-guide.md)** — Step-by-step implementation details with code examples
 - **[docs/03-setup-and-deployment.md](docs/03-setup-and-deployment.md)** — Local dev setup, Docker deployment, troubleshooting, and performance tuning
-- **[docs/04-nanochat-pytorch.md](docs/04-nanochat-pytorch.md)** — PyTorch inference details, device management, and model specifications
+- **[docs/04-smollm-pytorch.md](docs/04-smollm-pytorch.md)** — PyTorch inference details, device management, and model specifications
 
 Start with the [docs/README.md](docs/README.md) for a guided path based on your goals.
 

@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-NanoChat PyTorch Inference Server
+SmolLM Inference Server using llama-cpp-python
 
-Provides OpenAI-compatible chat completion API using native PyTorch inference.
-This server bridges the Go simulator to nanochat model inference.
+Provides OpenAI-compatible chat completion API using SmolLM GGUF model.
+This server bridges the Go simulator to SmolLM model inference via llama.cpp.
 
 Usage:
-    python -m cmd.nanochat.inference_server --port 8081 --model-dir ~/.cache/openai-api-simulator/nanochat
+    python cmd/nanochat/inference_server.py --port 8081 --model-path ~/.cache/openai-api-simulator/smollm
 
 Features:
     - Streaming Server-Sent Events for token generation
-    - Automatic device selection (CUDA, MPS, CPU)
-    - Efficient KV cache management
+    - Efficient KV cache management via llama.cpp
     - OpenAI-compatible /chat/completions endpoint
+    - Fast CPU inference with quantized GGUF models
+    - Automatic model download and caching
 """
 
 import argparse
@@ -21,11 +22,10 @@ import json
 import logging
 import os
 import sys
-import torch
 from pathlib import Path
-from types import SimpleNamespace
 from typing import AsyncGenerator, Optional, List
-from contextlib import nullcontext
+from urllib.request import urlopen
+from urllib.error import URLError
 
 try:
     from fastapi import FastAPI, HTTPException
@@ -35,7 +35,14 @@ try:
     import uvicorn
 except ImportError:
     print("Error: Required packages not installed.")
-    print("Install with: pip install fastapi uvicorn torch pydantic")
+    print("Install with: pip install fastapi uvicorn llama-cpp-python pydantic")
+    sys.exit(1)
+
+try:
+    from llama_cpp import Llama
+except ImportError:
+    print("Error: llama-cpp-python not installed.")
+    print("Install with: pip install llama-cpp-python")
     sys.exit(1)
 
 # Configure logging
@@ -44,6 +51,14 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# Constants
+# ============================================================================
+
+MODEL_REPO = "HuggingFaceTB/SmolLM2-360M-Instruct-GGUF"
+MODEL_FILE = "smollm2-360m-instruct-q8_0.gguf"
+MODEL_URL_BASE = f"https://huggingface.co/{MODEL_REPO}/resolve/main/"
 
 # ============================================================================
 # Data Models
@@ -60,334 +75,129 @@ class ChatCompletionRequest(BaseModel):
     messages: List[ChatMessage]
     temperature: Optional[float] = 0.7
     max_tokens: Optional[int] = 512
-    top_k: Optional[int] = 50
-    model: Optional[str] = "nanochat"
+    top_k: Optional[int] = 40
+    top_p: Optional[float] = 0.9
+    model: Optional[str] = "smollm"
 
 
 # ============================================================================
-# Device & Model Management
+# Model Management
 # ============================================================================
 
-def autodetect_device() -> tuple[str, torch.device]:
-    """Auto-detect best available device."""
-    if torch.cuda.is_available():
-        device_type = "cuda"
-        device = torch.device("cuda:0")
-        logger.info(f"Using CUDA device: {torch.cuda.get_device_name(0)}")
-    elif torch.backends.mps.is_available():
-        device_type = "mps"
-        device = torch.device("mps")
-        logger.info("Using Metal Performance Shaders (MPS) on Apple Silicon")
-    else:
-        device_type = "cpu"
-        device = torch.device("cpu")
-        logger.info("Using CPU for inference")
-    
-    return device_type, device
-
-
-def download_model_if_missing(model_dir: Path) -> Path:
+def download_model_if_missing(model_path: Path) -> Path:
     """
-    Download nanochat model files if they don't exist.
+    Download SmolLM GGUF model if it doesn't exist.
     
     Args:
-        model_dir: Path to directory where model should be stored
+        model_path: Path to directory where model should be stored
     
     Returns:
-        Path to model directory (created if needed)
+        Path to model file
     """
-    import urllib.request
+    model_path = Path(model_path)
+    model_path.mkdir(parents=True, exist_ok=True)
     
-    model_dir = Path(model_dir)
-    model_dir.mkdir(parents=True, exist_ok=True)
+    model_file = model_path / MODEL_FILE
     
-    # Define required files and their download URLs
-    files_to_download = {
-        "model_000650.pt": "https://huggingface.co/sdobson/nanochat/resolve/main/model_000650.pt",
-        "meta_000650.json": "https://huggingface.co/sdobson/nanochat/resolve/main/meta_000650.json",
-        "tokenizer.pkl": "https://huggingface.co/sdobson/nanochat/resolve/main/tokenizer.pkl",
-    }
+    if model_file.exists():
+        logger.info(f"Model file already exists: {model_file}")
+        file_size_gb = model_file.stat().st_size / (1024 ** 3)
+        logger.info(f"Model size: {file_size_gb:.2f} GB")
+        return model_file
     
-    missing_files = {
-        name: url for name, url in files_to_download.items()
-        if not (model_dir / name).exists()
-    }
+    logger.info(f"Downloading SmolLM model from Hugging Face...")
+    logger.info(f"Model: {MODEL_REPO}")
+    logger.info(f"File: {MODEL_FILE}")
+    logger.info(f"Target: {model_file}")
     
-    if not missing_files:
-        logger.info(f"All model files present in {model_dir}")
-        return model_dir
+    model_url = MODEL_URL_BASE + MODEL_FILE
     
-    logger.info(f"Downloading {len(missing_files)} missing model file(s)...")
-    
-    for filename, url in missing_files.items():
-        filepath = model_dir / filename
-        logger.info(f"Downloading {filename} from {url}...")
-        
-        try:
-            # Use urllib with progress indication
-            def download_progress(block_num, block_size, total_size):
-                downloaded = block_num * block_size
-                if total_size > 0:
-                    percent = min(downloaded * 100 / total_size, 100)
-                    mb_downloaded = downloaded / (1024 * 1024)
-                    mb_total = total_size / (1024 * 1024)
-                    logger.info(f"  {filename}: {percent:.1f}% ({mb_downloaded:.1f}MB / {mb_total:.1f}MB)")
-            
-            urllib.request.urlretrieve(url, filepath, reporthook=download_progress)
-            logger.info(f"✓ Downloaded {filename}")
-        except Exception as e:
-            logger.error(f"Failed to download {filename}: {e}")
-            raise
-    
-    logger.info(f"✓ All model files downloaded to {model_dir}")
-    return model_dir
-
-
-def load_nanochat_model(model_dir: Path, device: torch.device):
-    """
-    Load nanochat model and tokenizer from PyTorch checkpoint.
-    
-    Args:
-        model_dir: Path to directory containing nanochat model files
-        device: torch.device to load model onto
-    
-    Returns:
-        (model, tokenizer, config) tuple
-    """
-    model_dir = Path(model_dir)
-    
-    # Check required files
-    model_file = model_dir / "model_000650.pt"
-    meta_file = model_dir / "meta_000650.json"
-    tokenizer_file = model_dir / "tokenizer.pkl"
-    
-    if not model_file.exists():
-        raise FileNotFoundError(f"Model file not found: {model_file}")
-    if not meta_file.exists():
-        raise FileNotFoundError(f"Meta file not found: {meta_file}")
-    if not tokenizer_file.exists():
-        raise FileNotFoundError(f"Tokenizer file not found: {tokenizer_file}")
-    
-    # Load config
-    import json as json_module
-    import pickle
-    
-    with open(meta_file) as f:
-        config_data = json_module.load(f)
-    
-    logger.info(f"Loading nanochat model from {model_dir}")
-    logger.info(f"Config data: {config_data}")
-    
-    # Extract the model_config from the metadata
-    if isinstance(config_data, dict) and "model_config" in config_data:
-        config_dict = config_data["model_config"]
-    else:
-        config_dict = config_data
-    
-    # Convert dict to SimpleNamespace for nanochat.GPT compatibility
-    config = SimpleNamespace(**config_dict)
-    
-    logger.info(f"Model config: {config_dict}")
-    
-    # Try to load nanochat modules
     try:
-        from nanochat.gpt import GPT
-    except ImportError as e:
-        logger.error(
-            "Failed to import nanochat modules. "
-            "Make sure nanochat is installed: pip install nanochat or git clone https://github.com/karpathy/nanochat"
-        )
-        raise ImportError(f"nanochat modules not available: {e}") from e
-    
-    # Load model checkpoint
-    logger.info(f"Loading model checkpoint from {model_file}")
-    checkpoint = torch.load(model_file, map_location=device, weights_only=False)
-    
-    # Extract model state dict (checkpoint might be nested)
-    if isinstance(checkpoint, dict) and "model" in checkpoint:
-        state_dict = checkpoint["model"]
-    elif isinstance(checkpoint, dict) and "state_dict" in checkpoint:
-        state_dict = checkpoint["state_dict"]
-    else:
-        state_dict = checkpoint
-    
-    # Create model instance and load weights
-    model = GPT(config)
-    model.load_state_dict(state_dict)
-    model = model.to(device)
-    model.eval()
-    
-    # Load tokenizer
-    logger.info(f"Loading tokenizer from {tokenizer_file}")
-    with open(tokenizer_file, "rb") as f:
-        tokenizer = pickle.load(f)
-    
-    logger.info("Model and tokenizer loaded successfully")
-    
-    return model, tokenizer, config
-
-
-class NanoChatInference:
-    """Wrapper for nanochat inference with KV cache optimization."""
-    
-    def __init__(self, model, tokenizer, device: torch.device, device_type: str):
-        self.model = model
-        self.tokenizer = tokenizer
-        self.device = device
-        self.device_type = device_type
-        self.autocast_ctx = (
-            torch.amp.autocast(device_type=device_type, dtype=torch.bfloat16)
-            if device_type == "cuda"
-            else nullcontext()
-        )
-    
-    async def stream_completion(
-        self,
-        messages: List[ChatMessage],
-        temperature: float = 0.7,
-        max_tokens: int = 512,
-        top_k: int = 50
-    ) -> AsyncGenerator[str, None]:
-        """
-        Stream chat completion tokens as JSON lines.
-        
-        Yields Server-Sent Events format: "data: {json}\n\n"
-        """
-        try:
-            # Build conversation tokens from messages
-            tokens = self._build_conversation_tokens(messages)
-            if not tokens:
-                tokens = [1]  # Default token if empty
-            logger.info(f"Built conversation with {len(tokens)} tokens, generating...")
+        with urlopen(model_url) as response:
+            total_size = int(response.headers.get('content-length', 0))
             
-            # Generate tokens using the model
-            token_count = 0
-            # Try to get EOS token, fallback to a safe value
-            try:
-                if hasattr(self.tokenizer, "encode"):
-                    eos_encoded = self.tokenizer.encode("<|end|>")
-                    eos_token_id = eos_encoded[0] if eos_encoded else 2
-                else:
-                    eos_token_id = 2
-            except Exception as e:
-                logger.warning(f"Failed to get EOS token: {e}, using fallback")
-                eos_token_id = 2
+            logger.info(f"Downloading {total_size / (1024**2):.0f} MB...")
             
-            with torch.no_grad():
-                with self.autocast_ctx:
-                    # Convert token list to tensor
-                    x = torch.tensor(tokens, dtype=torch.long, device=self.device).unsqueeze(0)
+            with open(model_file, 'wb') as f:
+                chunk_size = 8192
+                downloaded = 0
+                
+                while True:
+                    chunk = response.read(chunk_size)
+                    if not chunk:
+                        break
                     
-                    # Generate tokens one by one
-                    while token_count < max_tokens:
-                        # Model forward pass
-                        logits = self.model(x)
-                        
-                        # Get logits for next token (last position)
-                        next_logits = logits[0, -1, :]
-                        
-                        # Apply temperature scaling
-                        if temperature > 0:
-                            next_logits = next_logits / temperature
-                        
-                        # Apply top-k filtering
-                        if top_k > 0:
-                            # Get top-k logits and their indices
-                            top_k_logits, top_k_indices = torch.topk(next_logits, min(top_k, next_logits.size(0)))
-                            
-                            # Set all other logits to very negative value
-                            next_logits_filtered = torch.full_like(next_logits, float('-inf'))
-                            next_logits_filtered[top_k_indices] = top_k_logits
-                            next_logits = next_logits_filtered
-                        
-                        # Convert to probabilities
-                        probs = torch.softmax(next_logits, dim=-1)
-                        
-                        # Sample next token
-                        next_token = torch.multinomial(probs, num_samples=1).item()
-                        
-                        # Stop if EOS token
-                        if next_token == eos_token_id:
-                            logger.info(f"Generated {token_count} tokens (EOS)")
-                            break
-                        
-                        # Decode token to text
-                        token_text = self._decode_token(next_token)
-                        
-                        # Yield token
-                        yield f"data: {json.dumps({'token': token_text})}\n\n"
-                        logger.debug(f"Token {token_count}: {repr(token_text)}")
-                        
-                        # Append to sequence
-                        x = torch.cat([x, torch.tensor([[next_token]], device=self.device)], dim=1)
-                        
-                        token_count += 1
-                        
-                        # Yield control to event loop occasionally
-                        if token_count % 10 == 0:
-                            await asyncio.sleep(0)
-            
-            yield "data: {\"done\": true}\n\n"
-            logger.info(f"Completion finished: {token_count} tokens generated")
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    
+                    if total_size > 0:
+                        percent = (downloaded / total_size) * 100
+                        mb_downloaded = downloaded / (1024 ** 2)
+                        mb_total = total_size / (1024 ** 2)
+                        logger.info(f"Progress: {percent:.1f}% ({mb_downloaded:.0f}/{mb_total:.0f} MB)")
         
-        except Exception as e:
-            logger.error(f"Error during generation: {e}", exc_info=True)
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        logger.info(f"✓ Model downloaded successfully")
+        
+    except URLError as e:
+        logger.error(f"Failed to download model: {e}")
+        logger.error(f"URL: {model_url}")
+        raise
     
-    def _build_conversation_tokens(self, messages: List[ChatMessage]) -> List[int]:
-        """Convert chat messages to token sequence."""
-        tokens = []
-        
-        # Add special tokens for conversation format
-        # Format: <|user_start|> user message <|user_end|> <|assistant_start|> assistant response <|assistant_end|>
-        
-        for msg in messages:
-            if msg.role == "user":
-                # Add user message
-                if hasattr(self.tokenizer, "encode"):
-                    tokens.extend(self.tokenizer.encode(f"User: {msg.content}\n"))
-                else:
-                    # Fallback: simple character-level encoding
-                    tokens.extend([ord(c) for c in f"User: {msg.content}\n"])
-            elif msg.role == "assistant":
-                # Add assistant message
-                if hasattr(self.tokenizer, "encode"):
-                    tokens.extend(self.tokenizer.encode(f"Assistant: {msg.content}\n"))
-                else:
-                    tokens.extend([ord(c) for c in f"Assistant: {msg.content}\n"])
-        
-        # Start assistant response
-        if hasattr(self.tokenizer, "encode"):
-            tokens.extend(self.tokenizer.encode("Assistant: "))
-        else:
-            tokens.extend([ord(c) for c in "Assistant: "])
-        
-        return tokens
+    return model_file
+
+
+def load_smollm_model(model_path: Path, n_gpu_layers: int = 0) -> Llama:
+    """
+    Load SmolLM model using llama.cpp with optimized parameters.
     
-    def _decode_token(self, token_id: int) -> str:
-        """Decode a single token ID to text."""
-        try:
-            if hasattr(self.tokenizer, "decode"):
-                return self.tokenizer.decode([token_id])
-            else:
-                # Fallback: try to use decode_single_token_utf8 or character
-                if hasattr(self.tokenizer, "decode_single_token_utf8"):
-                    return self.tokenizer.decode_single_token_utf8(token_id)
-                else:
-                    return chr(token_id) if 0 <= token_id < 256 else "?"
-        except Exception as e:
-            logger.warning(f"Failed to decode token {token_id}: {e}")
-            return "?"
+    Args:
+        model_path: Path to GGUF model file
+        n_gpu_layers: Number of layers to offload to GPU (0 = CPU only)
+    
+    Returns:
+        Llama model instance
+    """
+    model_path = Path(model_path)
+    
+    if not model_path.exists():
+        raise FileNotFoundError(f"Model file not found: {model_path}")
+    
+    logger.info(f"Loading SmolLM model from {model_path}")
+    logger.info(f"Model size: {model_path.stat().st_size / (1024**3):.2f} GB")
+    
+    try:
+        model = Llama(
+            model_path=str(model_path),
+            n_gpu_layers=n_gpu_layers,
+            n_ctx=2048,              # Context window
+            n_threads=4,              # CPU threads (matches small model)
+            n_batch=512,              # Batch size for prompt processing
+            n_ubatch=128,             # Micro-batch size for efficient memory use
+            verbose=False,
+            # Optimization flags for CPU inference
+            f16_kv=True,              # Use half-precision for KV cache
+            logits_all=False,         # Only compute logits for last token (faster)
+            # Memory optimization
+            use_mlock=False,          # Don't lock model in memory
+            use_mmap=True,            # Use memory-mapped file I/O (faster loading)
+        )
+        
+        logger.info("✓ SmolLM model loaded successfully")
+        return model
+        
+    except Exception as e:
+        logger.error(f"Failed to load model: {e}")
+        raise
 
 
 # ============================================================================
 # FastAPI Application
 # ============================================================================
 
-def create_app(model_dir: str, device_type: Optional[str] = None) -> FastAPI:
+def create_app(model_path: str, n_gpu_layers: int = 0) -> FastAPI:
     """Create and configure FastAPI application."""
     
-    app = FastAPI(title="NanoChat Inference Server", version="0.1.0")
+    app = FastAPI(title="SmolLM Inference Server", version="0.1.0")
     
     # Add CORS middleware for external clients
     app.add_middleware(
@@ -398,50 +208,27 @@ def create_app(model_dir: str, device_type: Optional[str] = None) -> FastAPI:
         allow_headers=["*"],
     )
     
-    # Device selection
-    if device_type:
-        if device_type == "cuda":
-            selected_device = torch.device("cuda:0")
-            selected_device_type = "cuda"
-        elif device_type == "mps":
-            selected_device = torch.device("mps")
-            selected_device_type = "mps"
-        elif device_type == "cpu":
-            selected_device = torch.device("cpu")
-            selected_device_type = "cpu"
-        else:
-            raise ValueError(f"Unsupported device type: {device_type}")
-    else:
-        selected_device_type, selected_device = autodetect_device()
-    
-    # Model and inference engine
-    inference_engine: Optional[NanoChatInference] = None
+    # Model state
+    model: Optional[Llama] = None
     model_error: Optional[str] = None
     
     # Startup event
     @app.on_event("startup")
     async def startup():
-        nonlocal inference_engine, model_error
+        nonlocal model, model_error
         try:
-            logger.info(f"Checking model directory: {model_dir}")
-            # Download model if missing
-            download_model_if_missing(model_dir)
+            logger.info(f"Starting SmolLM inference server...")
             
-            logger.info(f"Loading model from {model_dir}")
-            model, tokenizer, config = load_nanochat_model(
-                model_dir,
-                selected_device
-            )
-            inference_engine = NanoChatInference(
-                model,
-                tokenizer,
-                selected_device,
-                selected_device_type
-            )
-            logger.info("Model loaded successfully")
+            # Download model if needed
+            model_file = download_model_if_missing(model_path)
+            
+            # Load model
+            model = load_smollm_model(model_file, n_gpu_layers=n_gpu_layers)
+            logger.info("Inference server ready!")
+            
         except Exception as e:
             model_error = str(e)
-            logger.error(f"Failed to load model: {e}")
+            logger.error(f"Failed to initialize model: {e}")
     
     # Health check endpoint
     @app.get("/health")
@@ -454,9 +241,8 @@ def create_app(model_dir: str, device_type: Optional[str] = None) -> FastAPI:
             }
         return {
             "status": "ok",
-            "ready": inference_engine is not None,
-            "device": str(selected_device),
-            "device_type": selected_device_type
+            "ready": model is not None,
+            "model": "smollm2-360m-instruct"
         }
     
     # Chat completion endpoint
@@ -467,7 +253,7 @@ def create_app(model_dir: str, device_type: Optional[str] = None) -> FastAPI:
         if model_error:
             raise HTTPException(status_code=503, detail=f"Model not ready: {model_error}")
         
-        if not inference_engine:
+        if not model:
             raise HTTPException(status_code=503, detail="Inference engine not initialized")
         
         # Validate inputs
@@ -477,24 +263,145 @@ def create_app(model_dir: str, device_type: Optional[str] = None) -> FastAPI:
         if len(request.messages) > 500:
             raise HTTPException(status_code=400, detail="Too many messages (max 500)")
         
-        # Clamp parameters
-        temperature = max(0.0, min(2.0, request.temperature or 0.7))
-        max_tokens = max(1, min(4096, request.max_tokens or 512))
-        top_k = max(1, min(200, request.top_k or 50)) if request.top_k else None
+        # Clamp parameters for better quality
+        temperature = max(0.1, min(1.0, request.temperature or 0.7))  # Reduced range for quality
+        max_tokens = max(1, min(1024, request.max_tokens or 512))     # Cap at 1024 to avoid repetition
+        top_k = max(1, min(50, request.top_k or 40)) if request.top_k else 40
+        top_p = max(0.5, min(0.95, request.top_p or 0.9))            # Prevent too low top_p
         
-        # Log request
-        logger.info(f"Chat request: {len(request.messages)} messages")
-        for i, msg in enumerate(request.messages[-3:]):  # Log last 3 messages
-            logger.info(f"  [{msg.role}] (message {i}): {msg.content[:100]}")
+        # Build prompt from messages
+        # SmolLM2 uses the standard chat template: <|user|>\nmessage\n<|assistant|>\nresponse<|end_of_turn|>
+        # When only user messages are provided, we add <|assistant|> to let the model complete the response
+        prompt_parts = []
+        for msg in request.messages:
+            if msg.role == "user":
+                prompt_parts.append(f"<|user|>\n{msg.content}")
+            elif msg.role == "assistant":
+                prompt_parts.append(f"<|assistant|>\n{msg.content}<|end_of_turn|>")
+            elif msg.role == "system":
+                # System messages go at the beginning
+                prompt_parts.insert(0, f"<|system|>\n{msg.content}")
         
-        # Create streaming response
+        # Build final prompt - add assistant turn for model to complete
+        prompt = "\n".join(prompt_parts)
+        if not prompt.endswith("<|assistant|>"):
+            prompt += "\n<|assistant|>\n"
+        
+        logger.info(f"Chat request with {len(request.messages)} messages, max_tokens={max_tokens}")
+        
+        # Run inference in executor to avoid blocking
+        async def token_generator():
+            """Generate tokens using llama.cpp with OpenAI-compatible streaming format"""
+            try:
+                logger.info("Starting token generation...")
+                
+                # Call the model with optimized sampling parameters
+                completion = model(
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_k=top_k,
+                    top_p=top_p,
+                    repeat_penalty=1.1,          # Penalize repeated tokens
+                    frequency_penalty=0.1,        # Reduce frequency of common tokens
+                    presence_penalty=0.1,         # Encourage diverse tokens
+                    stream=True
+                )
+                
+                token_count = 0
+                response_started = False
+                for chunk in completion:
+                    # Extract token from llama-cpp-python streaming format
+                    if "choices" in chunk and len(chunk["choices"]) > 0:
+                        token_text = chunk["choices"][0].get("text", "")
+                        
+                        if token_text:
+                            # Skip the assistant marker at the start
+                            if not response_started:
+                                if "<|assistant|>" in token_text:
+                                    token_text = token_text.replace("<|assistant|>", "").lstrip()
+                                    if not token_text:
+                                        continue
+                                response_started = True
+                            
+                            # Stop at end-of-turn markers
+                            stop_markers = ["<|end_of_turn|>", "<|user|>", "<|system|>"]
+                            should_stop = False
+                            for marker in stop_markers:
+                                if marker in token_text:
+                                    token_text = token_text.split(marker)[0]
+                                    should_stop = True
+                                    break
+                            
+                            # Send token if not empty
+                            if token_text:
+                                # Format as OpenAI-compatible streaming response
+                                response = {
+                                    "id": "chatcmpl-smollm",
+                                    "object": "text_completion.chunk",
+                                    "created": 0,
+                                    "model": "smollm",
+                                    "choices": [
+                                        {
+                                            "index": 0,
+                                            "delta": {
+                                                "content": token_text
+                                            },
+                                            "finish_reason": None
+                                        }
+                                    ]
+                                }
+                                yield f"data: {json.dumps(response)}\n\n"
+                                token_count += 1
+                            
+                            # Stop if we hit a stop marker
+                            if should_stop:
+                                break
+                            
+                            # Yield control occasionally to prevent blocking
+                            if token_count % 5 == 0:
+                                await asyncio.sleep(0)
+                
+                # Send final completion marker in OpenAI format
+                final_response = {
+                    "id": "chatcmpl-smollm",
+                    "object": "text_completion.chunk",
+                    "created": 0,
+                    "model": "smollm",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": "stop"
+                        }
+                    ]
+                }
+                yield f"data: {json.dumps(final_response)}\n\n"
+                yield "data: [DONE]\n\n"
+                logger.info(f"Completion finished: {token_count} tokens generated")
+                
+            except Exception as e:
+                logger.error(f"Error during generation: {e}", exc_info=True)
+                error_response = {
+                    "id": "chatcmpl-smollm",
+                    "object": "text_completion.chunk",
+                    "created": 0,
+                    "model": "smollm",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "content": f"Error: {str(e)}"
+                            },
+                            "finish_reason": "error"
+                        }
+                    ]
+                }
+                yield f"data: {json.dumps(error_response)}\n\n"
+                yield "data: [DONE]\n\n"
+        
         return StreamingResponse(
-            inference_engine.stream_completion(
-                request.messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                top_k=top_k
-            ),
+            token_generator(),
             media_type="text/event-stream"
         )
     
@@ -502,16 +409,14 @@ def create_app(model_dir: str, device_type: Optional[str] = None) -> FastAPI:
     @app.get("/info")
     async def info():
         return {
-            "name": "nanochat-inference",
+            "name": "smollm-inference",
             "version": "0.1.0",
-            "model": "sdobson/nanochat",
-            "device": str(selected_device),
-            "device_type": selected_device_type,
-            "torch_version": torch.__version__
+            "model": "smollm2-360m-instruct",
+            "model_size": "0.4B parameters",
+            "quantization": "Q8_0"
         }
     
     return app
-
 
 # ============================================================================
 # Main Entry Point
@@ -519,7 +424,7 @@ def create_app(model_dir: str, device_type: Optional[str] = None) -> FastAPI:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="NanoChat Inference Server"
+        description="SmolLM Inference Server using llama.cpp"
     )
     parser.add_argument(
         "--port",
@@ -530,21 +435,20 @@ def main():
     parser.add_argument(
         "--host",
         type=str,
-        default="127.0.0.1",
-        help="Host to bind to (default: 127.0.0.1)"
+        default="0.0.0.0",
+        help="Host to bind to (default: 0.0.0.0)"
     )
     parser.add_argument(
-        "--model-dir",
+        "--model-path",
         type=str,
         default=None,
-        help="Path to nanochat model directory"
+        help="Path to directory containing GGUF model"
     )
     parser.add_argument(
-        "--device",
-        type=str,
-        choices=["cuda", "mps", "cpu"],
-        default=None,
-        help="Force specific device (cuda, mps, cpu). Auto-detect if not specified."
+        "--gpu-layers",
+        type=int,
+        default=0,
+        help="Number of layers to offload to GPU (0 = CPU only, default: 0)"
     )
     parser.add_argument(
         "--workers",
@@ -556,20 +460,18 @@ def main():
     args = parser.parse_args()
     
     # Determine model directory
-    if args.model_dir:
-        model_dir = args.model_dir
+    if args.model_path:
+        model_dir = args.model_path
     else:
-        model_dir = os.path.expanduser("~/.cache/openai-api-simulator/nanochat")
-    
-    model_dir = Path(model_dir)
-    # Note: model_dir will be created and model will be downloaded during app startup
+        model_dir = os.path.expanduser("~/.cache/openai-api-simulator/smollm")
     
     # Create app
-    app = create_app(str(model_dir), device_type=args.device)
+    app = create_app(model_dir, n_gpu_layers=args.gpu_layers)
     
     # Start server
-    logger.info(f"Starting NanoChat inference server on {args.host}:{args.port}")
+    logger.info(f"Starting SmolLM inference server on {args.host}:{args.port}")
     logger.info(f"Model directory: {model_dir}")
+    logger.info(f"GPU layers: {args.gpu_layers}")
     
     uvicorn.run(
         app,

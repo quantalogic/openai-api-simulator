@@ -98,10 +98,12 @@ func Run(publicPort, llamaPort int) error {
 	fmt.Println("Ready! Available models:")
 	fmt.Println("  • gpt-sim-1     (fake, deterministic)")
 	fmt.Println("  • nanochat      (real 561M – sdobson/nanochat)")
+	fmt.Println("  • smollm        (real 135M – HuggingFaceTB/SmolLM-135M)")
 	fmt.Println()
 	fmt.Println("Test real inference:")
 	fmt.Printf("curl http://localhost:%d/v1/chat/completions \\\n", publicPort)
 	fmt.Println("  -d '{\"model\":\"nanochat\",\"messages\":[{\"role\":\"user\",\"content\":\"Why is the sky blue?\"}]}'")
+	fmt.Println("  -d '{\"model\":\"smollm\",\"messages\":[{\"role\":\"user\",\"content\":\"Why is the sky blue?\"}]}'")
 	fmt.Println()
 
 	// Setup signal handling for graceful shutdown

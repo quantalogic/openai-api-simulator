@@ -13,8 +13,11 @@ import (
 )
 
 const (
-	// Hugging Face model repository
+	// Hugging Face model repository for nanochat
 	huggingFaceURL = "https://huggingface.co/sdobson/nanochat/resolve/main"
+
+	// SmolLM model name
+	smollmModelName = "HuggingFaceTB/SmolLM-135M"
 
 	// Model files to download (nanochat PyTorch checkpoint)
 	nanoModelFile      = "model_000650.pt"

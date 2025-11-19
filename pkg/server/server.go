@@ -54,7 +54,8 @@ func NewRouter() http.Handler {
 
 // NewRouterWithStreamDefaults returns a router that applies the provided
 // defaults when an incoming request does not supply `stream_options`.
-func NewRouterWithStreamDefaults(defaults streaming.StreamOptions, defaultResponseLength string, nanochatEnabled bool, nanochatUpstreamURL string) http.Handler {
+// If smollmEnabled is true, smollm requests will be proxied to smollmUpstreamURL.
+func NewRouterWithStreamDefaults(defaults streaming.StreamOptions, defaultResponseLength string, smollmEnabled bool, smollmUpstreamURL string) http.Handler {
 	mux := http.NewServeMux()
 
 	sseHandler := streaming.NewSSEStreamHandlerWithDefaults(defaults)
@@ -81,9 +82,9 @@ func NewRouterWithStreamDefaults(defaults streaming.StreamOptions, defaultRespon
 			return
 		}
 
-		// If nanochat is enabled and the model is "nanochat", proxy to llama.cpp
-		if nanochatEnabled && strings.ToLower(in.Model) == "nanochat" {
-			proxyToLlamaCpp(w, r, nanochatUpstreamURL, bodyBytes)
+		// If smollm is enabled and the request is for smollm, proxy to upstream
+		if smollmEnabled && in.Model == "smollm" {
+			proxyToLlamaCpp(w, r, smollmUpstreamURL, bodyBytes)
 			return
 		}
 
@@ -198,15 +199,8 @@ func NewRouterWithStreamDefaults(defaults streaming.StreamOptions, defaultRespon
 			{"id": "gpt-4o", "object": "model", "owned_by": "openai-simulator"},
 			{"id": "gpt-3.5-turbo", "object": "model", "owned_by": "openai-simulator"},
 		}
-
-		// Add nanochat model if enabled
-		if nanochatEnabled {
-			modelsList = append(modelsList, map[string]interface{}{
-				"id":       "nanochat",
-				"object":   "model",
-				"created":  1734470400,
-				"owned_by": "sdobson",
-			})
+		if smollmEnabled {
+			modelsList = append(modelsList, map[string]interface{}{"id": "smollm", "object": "model", "owned_by": "smollm"})
 		}
 
 		w.Header().Set("Content-Type", "application/json")

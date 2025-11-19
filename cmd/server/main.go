@@ -24,9 +24,9 @@ func main() {
 	tokensPerSec := flag.Float64("stream_tokens_per_second", 0, "Default token emission rate for streaming chunks; 0 disables throttling")
 	defaultResponseLength := flag.String("stream_default_response_length", "", "Optional default response length when unspecified: short|medium|long; empty = infer from messages")
 
-	// Nanochat proxy mode flags
-	nanochatEnabled := flag.Bool("nanochat-enabled", false, "Enable nanochat proxy mode")
-	nanochatUpstreamURL := flag.String("nanochat-upstream-url", "http://127.0.0.1:8081", "Upstream llama.cpp server URL")
+	// SmolLM proxy mode flags
+	smollmEnabled := flag.Bool("smollm-enabled", false, "Enable smollm proxy mode")
+	smollmUpstreamURL := flag.String("smollm-upstream-url", "http://127.0.0.1:8081", "Upstream llama.cpp server URL")
 
 	flag.Parse()
 
@@ -73,7 +73,7 @@ func main() {
 		}
 	}
 
-	handler := server.NewRouterWithStreamDefaults(defaults, *defaultResponseLength, *nanochatEnabled, *nanochatUpstreamURL)
+	handler := server.NewRouterWithStreamDefaults(defaults, *defaultResponseLength, *smollmEnabled, *smollmUpstreamURL)
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("server failed: %v", err)
 	}
